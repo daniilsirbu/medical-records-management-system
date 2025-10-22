@@ -246,7 +246,24 @@ const applicationTables = {
   }).index("by_patient", ["patientId"]),
 };
 
-export default defineSchema({
+// Extend the authTables to add isAuthorized field to users
+const customAuthTables = {
   ...authTables,
+  users: defineTable({
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    image: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    // Custom fields for authorization and roles
+    isAuthorized: v.optional(v.boolean()),
+    role: v.optional(v.union(v.literal("admin"), v.literal("user"))),
+  }).index("email", ["email"]),
+};
+
+export default defineSchema({
+  ...customAuthTables,
   ...applicationTables,
 });

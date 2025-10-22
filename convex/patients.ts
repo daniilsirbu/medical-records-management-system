@@ -1,11 +1,11 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireAuthorizedUser } from "./auth_helpers";
 
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     return await ctx.db.query("patients").order("desc").collect();
   },
 });
@@ -13,7 +13,7 @@ export const list = query({
 export const search = query({
   args: { searchTerm: v.string() },
   handler: async (ctx, args) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     
     if (!args.searchTerm) {
       return await ctx.db.query("patients").order("desc").take(50);
@@ -69,7 +69,7 @@ export const search = query({
 export const get = query({
   args: { id: v.id("patients") },
   handler: async (ctx, args) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     return await ctx.db.get(args.id);
   },
 });
@@ -88,7 +88,7 @@ export const create = mutation({
     gender: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     return await ctx.db.insert("patients", args);
   },
 });
@@ -129,7 +129,7 @@ export const update = mutation({
     birthday: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     const { id, ...updates } = args;
     
     // Filter out undefined values
@@ -144,7 +144,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { patientId: v.id("patients") },
   handler: async (ctx, args) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     console.log("Remove mutation called with args:", args);
     await ctx.db.delete(args.patientId);
   },
@@ -209,7 +209,7 @@ export const importPatients = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    await getAuthUserId(ctx);
+    await requireAuthorizedUser(ctx);
     
     const results = {
       imported: 0,

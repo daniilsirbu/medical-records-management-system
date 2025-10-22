@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuthorizedUser } from "./auth_helpers";
 
 export const create = mutation({
   args: {
@@ -10,6 +11,7 @@ export const create = mutation({
     isImportNote: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.insert("patientNotes", args);
   },
 });
@@ -19,6 +21,7 @@ export const list = query({
     patientId: v.id("patients"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db
       .query("patientNotes")
       .withIndex("by_patient", (q) => q.eq("patientId", args.patientId))
@@ -35,6 +38,7 @@ export const update = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     const { noteId, ...updates } = args;
     return await ctx.db.patch(noteId, updates);
   },
@@ -45,6 +49,7 @@ export const remove = mutation({
     noteId: v.id("patientNotes"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.delete(args.noteId);
   },
 });

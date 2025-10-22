@@ -1,9 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuthorizedUser } from "./auth_helpers";
 
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -18,6 +20,7 @@ export const create = mutation({
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.insert("miscFiles", {
       ...args,
       uploadDate: new Date().toISOString().split("T")[0],
@@ -30,6 +33,7 @@ export const list = query({
     patientId: v.id("patients"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     const files = await ctx.db
       .query("miscFiles")
       .withIndex("by_patient", (q) => q.eq("patientId", args.patientId))
@@ -50,6 +54,7 @@ export const remove = mutation({
     fileId: v.id("miscFiles"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     const file = await ctx.db.get(args.fileId);
     if (!file) return;
     

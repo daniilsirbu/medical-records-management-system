@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuthorizedUser } from "./auth_helpers";
 
 export const create = mutation({
   args: {
@@ -34,6 +35,7 @@ export const create = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.insert("formTemplates", {
       ...args,
       isActive: args.isActive ?? true,
@@ -44,6 +46,7 @@ export const create = mutation({
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db
       .query("formTemplates")
       .filter((q) => q.eq(q.field("isActive"), true))
@@ -57,6 +60,7 @@ export const get = query({
     templateId: v.id("formTemplates"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.get(args.templateId);
   },
 });
@@ -95,6 +99,7 @@ export const update = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     const { templateId, ...updates } = args;
     return await ctx.db.patch(templateId, updates);
   },
@@ -105,6 +110,7 @@ export const remove = mutation({
     templateId: v.id("formTemplates"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.patch(args.templateId, { isActive: false });
   },
 });

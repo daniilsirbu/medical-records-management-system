@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query, action } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { requireAuthorizedUser } from "./auth_helpers";
 
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -17,6 +19,7 @@ export const create = mutation({
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     return await ctx.db.insert("photos", args);
   },
 });
@@ -26,6 +29,7 @@ export const list = query({
     patientId: v.id("patients"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     const photos = await ctx.db
       .query("photos")
       .withIndex("by_patient", (q) => q.eq("patientId", args.patientId))
@@ -45,6 +49,7 @@ export const remove = mutation({
     photoId: v.id("photos"),
   },
   handler: async (ctx, args) => {
+    await requireAuthorizedUser(ctx);
     const photo = await ctx.db.get(args.photoId);
     if (!photo) return;
     

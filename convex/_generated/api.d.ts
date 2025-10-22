@@ -13,7 +13,9 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as auth_helpers from "../auth_helpers.js";
 import type * as consents from "../consents.js";
 import type * as dynamicForms from "../dynamicForms.js";
 import type * as followUps from "../followUps.js";
@@ -35,7 +37,9 @@ import type * as router from "../router.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   auth: typeof auth;
+  auth_helpers: typeof auth_helpers;
   consents: typeof consents;
   dynamicForms: typeof dynamicForms;
   followUps: typeof followUps;

@@ -32,6 +32,31 @@ export default function App() {
     );
   }
 
+  // Check if user is authorized
+  if (user && !user.isAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+          <div className="text-center">
+            <div className="mb-4">
+              <svg className="w-16 h-16 text-yellow-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.866-.833-2.536 0L3.278 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Accès en attente</h2>
+            <p className="text-gray-600 mb-6">
+              Votre compte a été créé avec succès. Un administrateur doit autoriser votre accès avant que vous puissiez utiliser le système.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Connecté en tant que: <strong>{user.name || user.email}</strong>
+            </p>
+            <SignOutButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedPatient) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -75,7 +100,7 @@ export default function App() {
                 >
                   Patients
                 </button>
-                <button
+                {/* <button
                   onClick={() => setCurrentView("import")}
                   className={`px-3 py-2 rounded-md text-sm font-medium ${
                     currentView === "import"
@@ -94,7 +119,7 @@ export default function App() {
                   }`}
                 >
                   Formulaires
-                </button>
+                </button> */}
               </nav>
             </div>
             <div className="flex items-center space-x-4">
@@ -111,8 +136,8 @@ export default function App() {
         {currentView === "patients" && (
           <PatientList onSelectPatient={setSelectedPatient} selectedPatientId={selectedPatient} />
         )}
-        {currentView === "import" && <PatientImport />}
-        {currentView === "forms" && <FormTemplatesList />}
+        {/* {currentView === "import" && <PatientImport />}
+        {currentView === "forms" && <FormTemplatesList />} */}
       </div>
     </div>
   );

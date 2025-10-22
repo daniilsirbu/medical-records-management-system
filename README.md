@@ -15,7 +15,28 @@ The backend code is in the `convex` directory.
 
 ## App authentication
 
-Chef apps use [Convex Auth](https://auth.convex.dev/) with Anonymous auth for easy sign in. You may wish to change this before deploying your app.
+This app uses [Convex Auth](https://auth.convex.dev/) with Google OAuth and email/password authentication.
+
+### Setting up Google OAuth
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Google+ API
+4. Go to "Credentials" and create OAuth 2.0 Client IDs
+5. Add your domain to authorized origins (e.g., `http://localhost:5173` for development)
+6. Copy the Client ID and Client Secret to your `.env` file
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+Required environment variables:
+- `AUTH_GOOGLE_CLIENT_ID`: Your Google OAuth Client ID
+- `AUTH_GOOGLE_CLIENT_SECRET`: Your Google OAuth Client Secret
 
 ## Developing and deploying your app
 
