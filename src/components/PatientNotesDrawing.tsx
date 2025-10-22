@@ -9,6 +9,7 @@ import {
   Editor,
   createShapeId,
   AssetRecordType,
+  useExportAs,
 } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
 import { blobToBase64 } from "../lib/blobToBase64";
@@ -30,6 +31,7 @@ const NOTES_PICTURES = [
 
 function DrawingToolbar() {
   const editor = useEditor();
+  const exportAs = useExportAs();
   const [selectedImage, setSelectedImage] = useState<string>("");
 
   const addImageToCanvas = async (imagePath: string) => {
@@ -87,24 +89,23 @@ function DrawingToolbar() {
     if (!editor) return;
 
     try {
-      const svg = await editor.getSvg();
-      if (!svg) return;
-
-      const png = await getSvgAsImage(svg, {
-        type: "png",
-        quality: 1,
-        scale: 1,
-      });
-
-      if (png) {
-        const dataUrl = await blobToBase64(png);
-        const link = document.createElement("a");
-        link.href = dataUrl as string;
-        link.download = `patient-notes-${Date.now()}.png`;
-        link.click();
+      // Select all shapes first to ensure we export everything
+      editor.selectAll();
+      const selectedIds = editor.getSelectedShapeIds();
+      
+      if (selectedIds.size === 0) {
+        alert("Rien à exporter. Ajoutez du contenu au canevas d'abord.");
+        return;
       }
+
+      // Convert Set to Array if needed
+      const shapeIds = Array.from(selectedIds);
+      
+      // Use the exportAs hook with selected shapes
+      await exportAs(shapeIds, 'png', `patient-notes-${Date.now()}`);
     } catch (error) {
       console.error("Error exporting drawing:", error);
+      alert("Erreur lors de l'exportation. Veuillez réessayer.");
     }
   };
 
