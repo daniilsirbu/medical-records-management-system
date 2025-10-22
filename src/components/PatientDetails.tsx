@@ -14,6 +14,7 @@ import { MedicalAssessmentForm } from "./MedicalAssessmentForm";
 import { DynamicFormsList } from "./DynamicFormsList";
 import { PostTreatmentInstructions } from "./PostTreatmentInstructions";
 import { PatientEditForm } from "./PatientEditForm";
+import { PatientNotesDrawing } from "./PatientNotesDrawing";
 
 interface PatientDetailsProps {
   patientId: Id<"patients">;
@@ -38,6 +39,7 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
   const tabs = [
     { id: "info", label: "Informations" },
     { id: "notes", label: "Notes" },
+    { id: "notes-drawing", label: "Notes avec dessins" },
     { id: "consents", label: "Consentements" },
     { id: "photos", label: "Photos" },
     { id: "files", label: "Fichiers" },
@@ -374,6 +376,8 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
           )}
 
           {activeTab === "notes" && <PatientNotes patientId={patientId} />}
+
+          {activeTab === "notes-drawing" && <PatientNotesDrawing patientId={patientId} />}
 
           {activeTab === "consents" && (
             <div>

@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.80",
+    "@tldraw/tldraw": "^4.1.1",
     "@types/fabric": "^5.3.10",
+    "canvas-size": "^2.0.0",
     "clsx": "^2.1.1",
     "convex": "1.21.1-alpha.1",
     "fabric": "^6.6.5",
