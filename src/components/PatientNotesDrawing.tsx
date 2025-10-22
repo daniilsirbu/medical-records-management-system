@@ -32,13 +32,9 @@ const TldrawCanvas = lazy(() =>
           
           try {
             const parsedData = JSON.parse(initialData);
-            console.log("Loading data into editor:", parsedData);
-            
-            // Use the correct method to load data - put/mergeRemoteChanges instead of loadSnapshot
             const records = Object.values(parsedData);
             if (records.length > 0) {
               editor.store.put(records);
-              console.log("Data loaded successfully with put method");
             }
           } catch (error) {
             console.error("Error loading initial data:", error);
@@ -53,7 +49,6 @@ const TldrawCanvas = lazy(() =>
             try {
               const snapshot = editor.store.serialize();
               const serialized = JSON.stringify(snapshot);
-              console.log("Auto-saving data:", snapshot);
               onDataChange(serialized);
             } catch (error) {
               console.error("Error auto-saving:", error);
@@ -592,27 +587,16 @@ export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
       if (!currentNoteId) return;
       
       try {
-        console.log("Saving to Convex:", { noteId: currentNoteId, dataLength: data.length });
         await updateNote({
           id: currentNoteId,
           tldrawData: data,
         });
-        console.log("Successfully saved to Convex");
       } catch (error) {
         console.error("Error auto-saving drawing:", error);
       }
     },
     [currentNoteId, updateNote]
   );
-
-  // Debug current note data
-  useEffect(() => {
-    console.log("Current note changed:", {
-      noteId: currentNoteId,
-      hasData: !!currentNote?.tldrawData,
-      dataLength: currentNote?.tldrawData?.length || 0
-    });
-  }, [currentNoteId, currentNote]);
 
   if (!patient) {
     return (
