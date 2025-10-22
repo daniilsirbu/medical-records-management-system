@@ -29,101 +29,73 @@ const NOTES_PICTURES = [
   { name: "Aisselle", file: "armpit.png" },
 ];
 
-function DrawingToolbar() {
-  const editor = useEditor();
-  const exportAs = useExportAs();
+// Hook personnalisé pour accéder à l'éditeur depuis l'extérieur
+function useExternalTldrawEditor(patientId: string) {
+  const [editor, setEditor] = useState<Editor | null>(null);
+
+  useEffect(() => {
+    // Attendre que l'éditeur soit disponible
+    const checkForEditor = () => {
+      const tldrawInstance = document.querySelector(`[data-testid="tldraw"]`);
+      if (tldrawInstance && (window as any).tldrawEditor) {
+        setEditor((window as any).tldrawEditor);
+      }
+    };
+
+    const interval = setInterval(checkForEditor, 100);
+    return () => clearInterval(interval);
+  }, [patientId]);
+
+  return editor;
+}
+
+function DrawingToolbarExternal({ patientId }: { patientId: string }) {
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const addImageToCanvas = async (imagePath: string) => {
-    if (!editor) return;
-
+    if (!imagePath) return;
+    
+    setIsLoading(true);
     try {
       const response = await fetch(`/${imagePath}`);
       const blob = await response.blob();
       const dataUrl = (await blobToBase64(blob)) as string;
 
-      const assetId = AssetRecordType.createId();
+      // Créer un événement personnalisé pour communiquer avec le canvas
+      const event = new CustomEvent('addImageToTldraw', {
+        detail: { imagePath, dataUrl, blob }
+      });
+      window.dispatchEvent(event);
       
-      const image = new Image();
-      image.onload = () => {
-        const asset = AssetRecordType.create({
-          id: assetId,
-          type: "image",
-          typeName: "asset",
-          props: {
-            name: imagePath,
-            src: dataUrl,
-            w: image.naturalWidth,
-            h: image.naturalHeight,
-            mimeType: blob.type,
-            isAnimated: false,
-          },
-          meta: {},
-        });
-
-        editor.createAssets([asset]);
-
-        const shapeId = createShapeId();
-        editor.createShape<TLImageShape>({
-          id: shapeId,
-          type: "image",
-          x: 100,
-          y: 100,
-          props: {
-            assetId,
-            w: Math.min(400, image.naturalWidth),
-            h: Math.min(400, image.naturalHeight),
-          },
-        });
-
-        editor.zoomToFit();
-      };
-      
-      image.src = dataUrl;
+      setSelectedImage("");
     } catch (error) {
       console.error("Error loading image:", error);
+      alert("Erreur lors du chargement de l'image.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const exportDrawing = async () => {
-    if (!editor) return;
-
-    try {
-      // Select all shapes first to ensure we export everything
-      editor.selectAll();
-      const selectedIds = editor.getSelectedShapeIds();
-      
-      if (selectedIds.size === 0) {
-        alert("Rien à exporter. Ajoutez du contenu au canevas d'abord.");
-        return;
-      }
-
-      // Convert Set to Array if needed
-      const shapeIds = Array.from(selectedIds);
-      
-      // Use the exportAs hook with selected shapes
-      await exportAs(shapeIds, 'png', `patient-notes-${Date.now()}`);
-    } catch (error) {
-      console.error("Error exporting drawing:", error);
-      alert("Erreur lors de l'exportation. Veuillez réessayer.");
-    }
+  const exportDrawing = () => {
+    const event = new CustomEvent('exportTldraw');
+    window.dispatchEvent(event);
   };
 
   const clearCanvas = () => {
-    if (!editor) return;
-    editor.selectAll();
-    editor.deleteShapes(editor.getSelectedShapeIds());
+    const event = new CustomEvent('clearTldraw');
+    window.dispatchEvent(event);
   };
 
   return (
-    <div className="absolute top-4 left-4 z-10 bg-white rounded-lg shadow-lg p-4 space-y-4 max-w-xs">
-      <h3 className="font-semibold text-gray-800">Images anatomiques</h3>
-      
-      <div className="space-y-2">
+    <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold text-gray-800 text-sm">Images anatomiques:</h3>
         <select
           value={selectedImage}
           onChange={(e) => setSelectedImage(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded text-sm"
+          className="p-2 border border-gray-300 rounded text-sm min-w-[180px]"
+          disabled={isLoading}
         >
           <option value="">Sélectionner une image...</option>
           {NOTES_PICTURES.map((img) => (
@@ -134,31 +106,127 @@ function DrawingToolbar() {
         </select>
         
         <button
-          onClick={() => selectedImage && addImageToCanvas(selectedImage)}
-          disabled={!selectedImage}
-          className="w-full px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          onClick={() => addImageToCanvas(selectedImage)}
+          disabled={!selectedImage || isLoading}
+          className="px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap"
         >
-          Ajouter à la toile
+          {isLoading ? "⏳ Chargement..." : "Ajouter"}
         </button>
       </div>
 
-      <div className="border-t pt-4 space-y-2">
+      <div className="flex items-center gap-2 border-l pl-4">
         <button
           onClick={exportDrawing}
-          className="w-full px-3 py-2 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+          className="px-3 py-2 bg-green-500 text-white rounded text-sm hover:bg-green-600 whitespace-nowrap"
         >
-          Exporter PNG
+          📥 Exporter PNG
         </button>
         
         <button
           onClick={clearCanvas}
-          className="w-full px-3 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600"
+          className="px-3 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
         >
-          Effacer tout
+          🗑️ Effacer tout
         </button>
       </div>
     </div>
   );
+}
+
+// Composant interne pour gérer les événements dans le canvas
+function TldrawEventHandler() {
+  const editor = useEditor();
+  const exportAs = useExportAs();
+
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleAddImage = async (event: CustomEvent) => {
+      const { imagePath, dataUrl, blob } = event.detail;
+      
+      try {
+        const assetId = AssetRecordType.createId();
+        
+        const image = new Image();
+        image.onload = () => {
+          const asset = AssetRecordType.create({
+            id: assetId,
+            type: "image",
+            typeName: "asset",
+            props: {
+              name: imagePath,
+              src: dataUrl,
+              w: image.naturalWidth,
+              h: image.naturalHeight,
+              mimeType: blob.type,
+              isAnimated: false,
+            },
+            meta: {},
+          });
+
+          editor.createAssets([asset]);
+
+          const shapeId = createShapeId();
+          editor.createShape<TLImageShape>({
+            id: shapeId,
+            type: "image",
+            x: 100,
+            y: 100,
+            props: {
+              assetId,
+              w: Math.min(400, image.naturalWidth),
+              h: Math.min(400, image.naturalHeight),
+            },
+          });
+
+          editor.zoomToFit();
+        };
+        
+        image.src = dataUrl;
+      } catch (error) {
+        console.error("Error adding image:", error);
+      }
+    };
+
+    const handleExport = async () => {
+      try {
+        editor.selectAll();
+        const selectedIds = editor.getSelectedShapeIds();
+        
+        if (selectedIds.size === 0) {
+          alert("Rien à exporter. Ajoutez du contenu au canevas d'abord.");
+          return;
+        }
+
+        const shapeIds = Array.from(selectedIds);
+        await exportAs(shapeIds, 'png', `patient-notes-${Date.now()}`);
+      } catch (error) {
+        console.error("Error exporting:", error);
+        alert("Erreur lors de l'exportation. Veuillez réessayer.");
+      }
+    };
+
+    const handleClear = () => {
+      try {
+        editor.selectAll();
+        editor.deleteShapes(editor.getSelectedShapeIds());
+      } catch (error) {
+        console.error("Error clearing canvas:", error);
+      }
+    };
+
+    window.addEventListener('addImageToTldraw', handleAddImage as EventListener);
+    window.addEventListener('exportTldraw', handleExport);
+    window.addEventListener('clearTldraw', handleClear);
+
+    return () => {
+      window.removeEventListener('addImageToTldraw', handleAddImage as EventListener);
+      window.removeEventListener('exportTldraw', handleExport);
+      window.removeEventListener('clearTldraw', handleClear);
+    };
+  }, [editor, exportAs]);
+
+  return null;
 }
 
 export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
@@ -181,23 +249,18 @@ export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
         </p>
       </div>
 
+      {/* Interface d'ajout d'images - extérieure au canvas */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <DrawingToolbarExternal patientId={patientId} />
+      </div>
+
       <div className="relative w-full h-[600px] border border-gray-300 rounded-lg overflow-hidden">
         <Tldraw
           persistenceKey={`patient-notes-${patientId}`}
           autoFocus={false}
         >
-          <DrawingToolbar />
+          <TldrawEventHandler />
         </Tldraw>
-      </div>
-
-      <div className="text-sm text-gray-500 p-4 bg-gray-50 rounded-lg">
-        <p className="font-medium mb-2">Instructions:</p>
-        <ul className="space-y-1">
-          <li>• Sélectionnez une image anatomique dans le menu déroulant</li>
-          <li>• Utilisez les outils de dessin pour annoter les zones d'intérêt</li>
-          <li>• Exportez vos notes en format PNG pour les sauvegarder</li>
-          <li>• Vos dessins sont automatiquement sauvegardés dans le navigateur</li>
-        </ul>
       </div>
     </div>
   );
