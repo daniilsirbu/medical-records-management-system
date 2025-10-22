@@ -58,6 +58,14 @@ const applicationTables = {
     isImportNote: v.optional(v.boolean()),
   }).index("by_patient", ["patientId"]),
 
+  drawingNotes: defineTable({
+    patientId: v.id("patients"),
+    name: v.string(),
+    tldrawData: v.optional(v.string()), // JSON string of tldraw persistence data
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_patient", ["patientId"]),
+
   consents: defineTable({
     patientId: v.id("patients"),
     types: v.array(v.string()),

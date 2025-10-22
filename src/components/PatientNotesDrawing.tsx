@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useState, useEffect, lazy, Suspense, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -8,13 +8,72 @@ import { getSvgAsImage } from "../lib/getSvgAsImage";
 // Chargement dynamique complet de Tldraw et ses composants
 const TldrawCanvas = lazy(() => 
   import("@tldraw/tldraw").then((module) => ({ 
-    default: function TldrawCanvasComponent({ persistenceKey, patientId }: { persistenceKey: string, patientId: string }) {
+    default: function TldrawCanvasComponent({ 
+      persistenceKey, 
+      patientId, 
+      initialData, 
+      onDataChange 
+    }: { 
+      persistenceKey: string, 
+      patientId: string,
+      initialData?: string,
+      onDataChange?: (data: string) => void
+    }) {
       const { Tldraw, useEditor, useExportAs, createShapeId, AssetRecordType } = module;
       
       // Gestionnaire d'événements intégré
       function TldrawEventHandler() {
         const editor = useEditor();
         const exportAs = useExportAs();
+
+        // Load initial data when editor is ready
+        useEffect(() => {
+          if (!editor || !initialData) return;
+          
+          try {
+            const parsedData = JSON.parse(initialData);
+            console.log("Loading data into editor:", parsedData);
+            
+            // Use the correct method to load data - put/mergeRemoteChanges instead of loadSnapshot
+            const records = Object.values(parsedData);
+            if (records.length > 0) {
+              editor.store.put(records);
+              console.log("Data loaded successfully with put method");
+            }
+          } catch (error) {
+            console.error("Error loading initial data:", error);
+          }
+        }, [editor, initialData]);
+
+        // Auto-save changes
+        useEffect(() => {
+          if (!editor || !onDataChange) return;
+
+          const handleChange = () => {
+            try {
+              const snapshot = editor.store.serialize();
+              const serialized = JSON.stringify(snapshot);
+              console.log("Auto-saving data:", snapshot);
+              onDataChange(serialized);
+            } catch (error) {
+              console.error("Error auto-saving:", error);
+            }
+          };
+
+          // Debounce the auto-save
+          let timeoutId: NodeJS.Timeout;
+          const debouncedSave = () => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(handleChange, 1000); // Save after 1 second of inactivity
+          };
+
+          const unsubscribe = editor.store.listen(debouncedSave);
+          
+          return () => {
+            unsubscribe();
+            clearTimeout(timeoutId);
+          };
+        }, [editor, onDataChange]);
 
         useEffect(() => {
           if (!editor) return;
@@ -81,11 +140,8 @@ const TldrawCanvas = lazy(() =>
               
               let filename = `patient-notes-${Date.now()}`;
               if (noteId) {
-                const notes = loadNotes(patientId);
-                const note = notes.find((n: any) => n.id === noteId);
-                if (note) {
-                  filename = `${note.name}-${new Date().toISOString().split('T')[0]}`;
-                }
+                // For export, we can use the noteId directly to construct a meaningful filename
+                filename = `drawing-note-${noteId}-${new Date().toISOString().split('T')[0]}`;
               }
               
               await exportAs(shapeIds, 'png', filename);
@@ -97,19 +153,19 @@ const TldrawCanvas = lazy(() =>
 
           const handleSaveNote = async (event: CustomEvent) => {
             try {
-              const { noteId } = event.detail;
-              if (!noteId) return;
+              const { noteId, updateNoteMutation } = event.detail;
+              if (!noteId || !updateNoteMutation) return;
 
-              const notes = loadNotes(patientId);
-              const note = notes.find((n: any) => n.id === noteId);
-              if (!note) return;
+              // Get the current tldraw data using the correct API
+              const snapshot = editor.store.serialize();
+              const tldrawData = JSON.stringify(snapshot);
 
-              const updatedNote = {
-                ...note,
-                updatedAt: new Date().toISOString(),
-              };
+              // Update the note in Convex with the tldraw data
+              await updateNoteMutation({
+                id: noteId,
+                tldrawData,
+              });
               
-              saveNote(patientId, updatedNote);
               alert("Note sauvegardée avec succès !");
             } catch (error) {
               console.error("Error saving note:", error);
@@ -145,8 +201,9 @@ const TldrawCanvas = lazy(() =>
       return (
         <Tldraw
           key={persistenceKey}
-          persistenceKey={persistenceKey}
+          persistenceKey={undefined} // Disable automatic persistence
           autoFocus={false}
+          licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY}
         >
           <TldrawEventHandler />
         </Tldraw>
@@ -167,8 +224,10 @@ interface PatientNotesDrawingProps {
 }
 
 interface DrawingNote {
-  id: string;
+  _id: Id<"drawingNotes">;
+  patientId: Id<"patients">;
   name: string;
+  tldrawData?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -183,75 +242,51 @@ const NOTES_PICTURES = [
   { name: "Aisselle", file: "armpit.png" },
 ];
 
-// Utilitaires pour la gestion des notes
-const getNotesStorageKey = (patientId: string) => `patient-notes-${patientId}`;
-
-const saveNote = (patientId: string, note: DrawingNote) => {
-  const key = getNotesStorageKey(patientId);
-  const notes = loadNotes(patientId);
-  const updatedNotes = notes.filter(n => n.id !== note.id);
-  updatedNotes.push(note);
-  localStorage.setItem(key, JSON.stringify(updatedNotes));
-};
-
-const loadNotes = (patientId: string): DrawingNote[] => {
-  const key = getNotesStorageKey(patientId);
-  const stored = localStorage.getItem(key);
-  if (!stored) return [];
-  try {
-    return JSON.parse(stored);
-  } catch {
-    return [];
-  }
-};
-
-const deleteNote = (patientId: string, noteId: string) => {
-  const key = getNotesStorageKey(patientId);
-  const notes = loadNotes(patientId);
-  const filteredNotes = notes.filter(n => n.id !== noteId);
-  localStorage.setItem(key, JSON.stringify(filteredNotes));
-  
-  // Supprimer aussi la persistance tldraw
-  localStorage.removeItem(`tldraw-patient-notes-${patientId}-${noteId}`);
-};
 
 // Composant pour gérer les notes multiples
 function NotesManager({ patientId, currentNoteId, onNoteChange }: {
-  patientId: string;
-  currentNoteId: string | null;
-  onNoteChange: (noteId: string | null) => void;
+  patientId: Id<"patients">;
+  currentNoteId: Id<"drawingNotes"> | null;
+  onNoteChange: (noteId: Id<"drawingNotes"> | null) => void;
 }) {
-  const [notes, setNotes] = useState<DrawingNote[]>([]);
+  const notes = useQuery(api.drawingNotes.list, { patientId }) || [];
+  const createNote = useMutation(api.drawingNotes.create);
+  const deleteNote = useMutation(api.drawingNotes.remove);
   const [showNewNoteDialog, setShowNewNoteDialog] = useState(false);
   const [newNoteName, setNewNoteName] = useState("");
 
-  useEffect(() => {
-    setNotes(loadNotes(patientId));
-  }, [patientId]);
-
-  const createNewNote = () => {
+  const createNewNote = async () => {
     if (!newNoteName.trim()) return;
     
-    const newNote: DrawingNote = {
-      id: `note-${Date.now()}`,
-      name: newNoteName.trim(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    
-    saveNote(patientId, newNote);
-    setNotes(loadNotes(patientId));
-    setNewNoteName("");
-    setShowNewNoteDialog(false);
-    onNoteChange(newNote.id);
+    try {
+      const newNoteId = await createNote({
+        patientId,
+        name: newNoteName.trim(),
+      });
+      
+      setNewNoteName("");
+      setShowNewNoteDialog(false);
+      onNoteChange(newNoteId);
+    } catch (error) {
+      console.error("Error creating note:", error);
+      alert("Erreur lors de la création de la note.");
+    }
   };
 
-  const handleDeleteNote = (noteId: string) => {
+  const handleDeleteNote = async (noteId: Id<"drawingNotes">) => {
     if (confirm("Êtes-vous sûr de vouloir supprimer cette note ?")) {
-      deleteNote(patientId, noteId);
-      setNotes(loadNotes(patientId));
-      if (currentNoteId === noteId) {
-        onNoteChange(null);
+      try {
+        await deleteNote({ id: noteId });
+        
+        // Supprimer aussi la persistance tldraw locale
+        localStorage.removeItem(`tldraw-patient-notes-${patientId}-${noteId}`);
+        
+        if (currentNoteId === noteId) {
+          onNoteChange(null);
+        }
+      } catch (error) {
+        console.error("Error deleting note:", error);
+        alert("Erreur lors de la suppression de la note.");
       }
     }
   };
@@ -262,12 +297,12 @@ function NotesManager({ patientId, currentNoteId, onNoteChange }: {
         <h3 className="font-semibold text-gray-800 text-sm">Notes:</h3>
         <select
           value={currentNoteId || ""}
-          onChange={(e) => onNoteChange(e.target.value || null)}
+          onChange={(e) => onNoteChange(e.target.value as Id<"drawingNotes"> || null)}
           className="p-2 border border-gray-300 rounded text-sm min-w-[200px]"
         >
           <option value="">Nouvelle note temporaire</option>
           {notes.map((note) => (
-            <option key={note.id} value={note.id}>
+            <option key={note._id} value={note._id}>
               {note.name} ({new Date(note.createdAt).toLocaleDateString()})
             </option>
           ))}
@@ -325,9 +360,10 @@ function NotesManager({ patientId, currentNoteId, onNoteChange }: {
   );
 }
 
-function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: string; currentNoteId: string | null }) {
+function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"patients">; currentNoteId: Id<"drawingNotes"> | null }) {
   const [selectedImage, setSelectedImage] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const updateNote = useMutation(api.drawingNotes.update);
 
   const addImageToCanvas = async (imagePath: string) => {
     if (!imagePath) return;
@@ -365,7 +401,12 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: strin
 
   const saveCurrentNote = () => {
     if (currentNoteId) {
-      const event = new CustomEvent('saveTldrawNote', { detail: { noteId: currentNoteId } });
+      const event = new CustomEvent('saveTldrawNote', { 
+        detail: { 
+          noteId: currentNoteId,
+          updateNoteMutation: updateNote
+        } 
+      });
       window.dispatchEvent(event);
     }
   };
@@ -460,7 +501,17 @@ function TldrawErrorFallback({ error, retry }: { error: Error, retry: () => void
 }
 
 // Wrapper pour le canvas Tldraw avec gestion d'erreurs
-function TldrawWrapper({ patientId, persistenceKey }: { patientId: string, persistenceKey: string }) {
+function TldrawWrapper({ 
+  patientId, 
+  persistenceKey, 
+  initialData, 
+  onDataChange 
+}: { 
+  patientId: string, 
+  persistenceKey: string,
+  initialData?: string,
+  onDataChange?: (data: string) => void
+}) {
   const [hasError, setHasError] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
@@ -491,7 +542,12 @@ function TldrawWrapper({ patientId, persistenceKey }: { patientId: string, persi
   return (
     <Suspense fallback={<TldrawLoadingFallback />}>
       <ErrorBoundary onError={() => setHasError(true)}>
-        <TldrawCanvas persistenceKey={persistenceKey} patientId={patientId} />
+        <TldrawCanvas 
+          persistenceKey={persistenceKey} 
+          patientId={patientId}
+          initialData={initialData}
+          onDataChange={onDataChange}
+        />
       </ErrorBoundary>
     </Suspense>
   );
@@ -526,7 +582,37 @@ class ErrorBoundary extends React.Component<
 
 export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
   const patient = useQuery(api.patients.get, { id: patientId });
-  const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
+  const [currentNoteId, setCurrentNoteId] = useState<Id<"drawingNotes"> | null>(null);
+  const currentNote = useQuery(api.drawingNotes.get, currentNoteId ? { id: currentNoteId } : "skip");
+  const updateNote = useMutation(api.drawingNotes.update);
+
+  // Handle drawing data changes with debouncing
+  const handleDataChange = useCallback(
+    async (data: string) => {
+      if (!currentNoteId) return;
+      
+      try {
+        console.log("Saving to Convex:", { noteId: currentNoteId, dataLength: data.length });
+        await updateNote({
+          id: currentNoteId,
+          tldrawData: data,
+        });
+        console.log("Successfully saved to Convex");
+      } catch (error) {
+        console.error("Error auto-saving drawing:", error);
+      }
+    },
+    [currentNoteId, updateNote]
+  );
+
+  // Debug current note data
+  useEffect(() => {
+    console.log("Current note changed:", {
+      noteId: currentNoteId,
+      hasData: !!currentNote?.tldrawData,
+      dataLength: currentNote?.tldrawData?.length || 0
+    });
+  }, [currentNoteId, currentNote]);
 
   if (!patient) {
     return (
@@ -564,7 +650,12 @@ export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
       </div>
 
       <div className="relative w-full h-[600px] border border-gray-300 rounded-lg overflow-hidden">
-        <TldrawWrapper patientId={patientId} persistenceKey={persistenceKey} />
+        <TldrawWrapper 
+          patientId={patientId} 
+          persistenceKey={persistenceKey}
+          initialData={currentNote?.tldrawData}
+          onDataChange={handleDataChange}
+        />
       </div>
     </div>
   );

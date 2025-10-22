@@ -17,6 +17,7 @@ import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as auth_helpers from "../auth_helpers.js";
 import type * as consents from "../consents.js";
+import type * as drawingNotes from "../drawingNotes.js";
 import type * as dynamicForms from "../dynamicForms.js";
 import type * as followUps from "../followUps.js";
 import type * as formTemplates from "../formTemplates.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   auth_helpers: typeof auth_helpers;
   consents: typeof consents;
+  drawingNotes: typeof drawingNotes;
   dynamicForms: typeof dynamicForms;
   followUps: typeof followUps;
   formTemplates: typeof formTemplates;
