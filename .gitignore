@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Ignored for the template, you probably want to remove it:
+package-lock.json
+.vercel
+
+# Large backup files and photo directories
+dev-backup-with-files.zip
+client_photos/
+payment_history/
+notes_pictures/
+draw-a-ui/

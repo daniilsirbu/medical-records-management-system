@@ -1,0 +1,7 @@
+client_photos/
+payment_history/
+*.zip
+*.tar.gz
+node_modules/
+.env.local
+import-files.mjs
