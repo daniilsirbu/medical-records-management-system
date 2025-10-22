@@ -40,13 +40,13 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
     { id: "info", label: "Informations" },
     { id: "notes", label: "Notes" },
     { id: "notes-drawing", label: "Notes avec dessins" },
-    { id: "consents", label: "Consentements" },
+    // { id: "consents", label: "Consentements" },
     { id: "photos", label: "Photos" },
     { id: "files", label: "Fichiers" },
-    { id: "followups", label: "Suivis" },
-    { id: "medical-forms", label: "Formulaires médicaux" },
-    { id: "dynamic-forms", label: "Nouveaux formulaires" },
-    { id: "instructions", label: "Instructions" },
+    // { id: "followups", label: "Suivis" },
+    // { id: "medical-forms", label: "Formulaires médicaux" },
+    // { id: "dynamic-forms", label: "Nouveaux formulaires" },
+    // { id: "instructions", label: "Instructions" },
   ];
 
   if (showEditForm) {
@@ -379,7 +379,7 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
 
           {activeTab === "notes-drawing" && <PatientNotesDrawing patientId={patientId} />}
 
-          {activeTab === "consents" && (
+          {/* {activeTab === "consents" && (
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium">Consentements</h3>
@@ -392,13 +392,13 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
               </div>
               <ConsentList patientId={patientId} />
             </div>
-          )}
+          )} */}
 
           {activeTab === "photos" && <BeforeAfterPhotos patientId={patientId} />}
 
           {activeTab === "files" && <MiscellaneousFiles patientId={patientId} />}
 
-          {activeTab === "followups" && (
+          {/* {activeTab === "followups" && (
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium">Suivis médicaux</h3>
@@ -411,9 +411,9 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
               </div>
               <FollowUpList patientId={patientId} />
             </div>
-          )}
+          )} */}
 
-          {activeTab === "medical-forms" && (
+          {/* {activeTab === "medical-forms" && (
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium">Formulaires médicaux</h3>
@@ -426,18 +426,18 @@ export function PatientDetails({ patientId }: PatientDetailsProps) {
               </div>
               <MedicalFormsList patientId={patientId} />
             </div>
-          )}
+          )} */}
 
-          {activeTab === "dynamic-forms" && (
+          {/* {activeTab === "dynamic-forms" && (
             <div>
               <h3 className="text-lg font-medium mb-4">Nouveaux formulaires</h3>
               <DynamicFormsList patientId={patientId} />
             </div>
-          )}
+          )} */}
 
-          {activeTab === "instructions" && (
+          {/* {activeTab === "instructions" && (
             <PostTreatmentInstructions patientId={patientId} />
-          )}
+          )} */}
         </div>
       </div>
     </div>

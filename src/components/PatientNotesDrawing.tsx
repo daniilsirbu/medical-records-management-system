@@ -1,20 +1,166 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import {
-  Tldraw,
-  TLImageShape,
-  useEditor,
-  Editor,
-  createShapeId,
-  AssetRecordType,
-  useExportAs,
-  TLStoreSnapshot,
-} from "@tldraw/tldraw";
-import "@tldraw/tldraw/tldraw.css";
 import { blobToBase64 } from "../lib/blobToBase64";
 import { getSvgAsImage } from "../lib/getSvgAsImage";
+
+// Chargement dynamique complet de Tldraw et ses composants
+const TldrawCanvas = lazy(() => 
+  import("@tldraw/tldraw").then((module) => ({ 
+    default: function TldrawCanvasComponent({ persistenceKey, patientId }: { persistenceKey: string, patientId: string }) {
+      const { Tldraw, useEditor, useExportAs, createShapeId, AssetRecordType } = module;
+      
+      // Gestionnaire d'événements intégré
+      function TldrawEventHandler() {
+        const editor = useEditor();
+        const exportAs = useExportAs();
+
+        useEffect(() => {
+          if (!editor) return;
+
+          const handleAddImage = async (event: CustomEvent) => {
+            const { imagePath, dataUrl, blob } = event.detail;
+            
+            try {
+              const assetId = AssetRecordType.createId();
+              
+              const image = new Image();
+              image.onload = () => {
+                const asset = AssetRecordType.create({
+                  id: assetId,
+                  type: "image",
+                  typeName: "asset",
+                  props: {
+                    name: imagePath,
+                    src: dataUrl,
+                    w: image.naturalWidth,
+                    h: image.naturalHeight,
+                    mimeType: blob.type,
+                    isAnimated: false,
+                  },
+                  meta: {},
+                });
+
+                editor.createAssets([asset]);
+
+                const shapeId = createShapeId();
+                editor.createShape({
+                  id: shapeId,
+                  type: "image",
+                  x: 100,
+                  y: 100,
+                  props: {
+                    assetId,
+                    w: Math.min(400, image.naturalWidth),
+                    h: Math.min(400, image.naturalHeight),
+                  },
+                });
+
+                editor.zoomToFit();
+              };
+              
+              image.src = dataUrl;
+            } catch (error) {
+              console.error("Error adding image:", error);
+            }
+          };
+
+          const handleExport = async (event: CustomEvent) => {
+            try {
+              editor.selectAll();
+              const selectedIds = editor.getSelectedShapeIds();
+              
+              if (selectedIds.size === 0) {
+                alert("Rien à exporter. Ajoutez du contenu au canevas d'abord.");
+                return;
+              }
+
+              const shapeIds = Array.from(selectedIds);
+              const { noteId } = event.detail || {};
+              
+              let filename = `patient-notes-${Date.now()}`;
+              if (noteId) {
+                const notes = loadNotes(patientId);
+                const note = notes.find((n: any) => n.id === noteId);
+                if (note) {
+                  filename = `${note.name}-${new Date().toISOString().split('T')[0]}`;
+                }
+              }
+              
+              await exportAs(shapeIds, 'png', filename);
+            } catch (error) {
+              console.error("Error exporting:", error);
+              alert("Erreur lors de l'exportation. Veuillez réessayer.");
+            }
+          };
+
+          const handleSaveNote = async (event: CustomEvent) => {
+            try {
+              const { noteId } = event.detail;
+              if (!noteId) return;
+
+              const notes = loadNotes(patientId);
+              const note = notes.find((n: any) => n.id === noteId);
+              if (!note) return;
+
+              const updatedNote = {
+                ...note,
+                updatedAt: new Date().toISOString(),
+              };
+              
+              saveNote(patientId, updatedNote);
+              alert("Note sauvegardée avec succès !");
+            } catch (error) {
+              console.error("Error saving note:", error);
+              alert("Erreur lors de la sauvegarde.");
+            }
+          };
+
+          const handleClear = () => {
+            try {
+              editor.selectAll();
+              editor.deleteShapes(editor.getSelectedShapeIds());
+            } catch (error) {
+              console.error("Error clearing canvas:", error);
+            }
+          };
+
+          window.addEventListener('addImageToTldraw', handleAddImage as EventListener);
+          window.addEventListener('exportTldraw', handleExport as EventListener);
+          window.addEventListener('saveTldrawNote', handleSaveNote as EventListener);
+          window.addEventListener('clearTldraw', handleClear);
+
+          return () => {
+            window.removeEventListener('addImageToTldraw', handleAddImage as EventListener);
+            window.removeEventListener('exportTldraw', handleExport as EventListener);
+            window.removeEventListener('saveTldrawNote', handleSaveNote as EventListener);
+            window.removeEventListener('clearTldraw', handleClear);
+          };
+        }, [editor, exportAs, patientId]);
+
+        return null;
+      }
+
+      return (
+        <Tldraw
+          key={persistenceKey}
+          persistenceKey={persistenceKey}
+          autoFocus={false}
+        >
+          <TldrawEventHandler />
+        </Tldraw>
+      );
+    }
+  }))
+);
+
+// Charger les styles de manière dynamique
+const loadTldrawStyles = () => {
+  if (typeof window !== 'undefined' && !document.querySelector('link[href*="tldraw.css"]')) {
+    import("@tldraw/tldraw/tldraw.css");
+  }
+};
 
 interface PatientNotesDrawingProps {
   patientId: Id<"patients">;
@@ -25,7 +171,6 @@ interface DrawingNote {
   name: string;
   createdAt: string;
   updatedAt: string;
-  snapshot?: TLStoreSnapshot;
 }
 
 const NOTES_PICTURES = [
@@ -280,136 +425,103 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: strin
   );
 }
 
-// Composant interne pour gérer les événements dans le canvas
-function TldrawEventHandler({ patientId }: { patientId: string }) {
-  const editor = useEditor();
-  const exportAs = useExportAs();
+
+// Composant de chargement pour le canvas
+function TldrawLoadingFallback() {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-gray-600">Chargement du canvas de dessin...</p>
+      </div>
+    </div>
+  );
+}
+
+// Composant d'erreur pour le canvas
+function TldrawErrorFallback({ error, retry }: { error: Error, retry: () => void }) {
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-red-50 border border-red-200">
+      <div className="text-center p-6">
+        <div className="text-red-500 text-4xl mb-4">⚠️</div>
+        <h3 className="text-lg font-semibold text-red-800 mb-2">Erreur de chargement du canvas</h3>
+        <p className="text-red-600 text-sm mb-4">
+          Le canvas de dessin n'a pas pu se charger correctement.
+        </p>
+        <button
+          onClick={retry}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+        >
+          Réessayer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Wrapper pour le canvas Tldraw avec gestion d'erreurs
+function TldrawWrapper({ patientId, persistenceKey }: { patientId: string, persistenceKey: string }) {
+  const [hasError, setHasError] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    if (!editor) return;
+    // S'assurer qu'on est côté client
+    setIsClient(true);
+    // Charger les styles Tldraw
+    loadTldrawStyles();
+  }, []);
 
-    const handleAddImage = async (event: CustomEvent) => {
-      const { imagePath, dataUrl, blob } = event.detail;
-      
-      try {
-        const assetId = AssetRecordType.createId();
-        
-        const image = new Image();
-        image.onload = () => {
-          const asset = AssetRecordType.create({
-            id: assetId,
-            type: "image",
-            typeName: "asset",
-            props: {
-              name: imagePath,
-              src: dataUrl,
-              w: image.naturalWidth,
-              h: image.naturalHeight,
-              mimeType: blob.type,
-              isAnimated: false,
-            },
-            meta: {},
-          });
+  useEffect(() => {
+    // Reset l'erreur quand la persistenceKey change
+    setHasError(false);
+  }, [persistenceKey]);
 
-          editor.createAssets([asset]);
+  const handleRetry = () => {
+    setHasError(false);
+  };
 
-          const shapeId = createShapeId();
-          editor.createShape<TLImageShape>({
-            id: shapeId,
-            type: "image",
-            x: 100,
-            y: 100,
-            props: {
-              assetId,
-              w: Math.min(400, image.naturalWidth),
-              h: Math.min(400, image.naturalHeight),
-            },
-          });
+  if (!isClient) {
+    return <TldrawLoadingFallback />;
+  }
 
-          editor.zoomToFit();
-        };
-        
-        image.src = dataUrl;
-      } catch (error) {
-        console.error("Error adding image:", error);
-      }
-    };
+  if (hasError) {
+    return <TldrawErrorFallback error={new Error("Canvas failed to load")} retry={handleRetry} />;
+  }
 
-    const handleExport = async (event: CustomEvent) => {
-      try {
-        editor.selectAll();
-        const selectedIds = editor.getSelectedShapeIds();
-        
-        if (selectedIds.size === 0) {
-          alert("Rien à exporter. Ajoutez du contenu au canevas d'abord.");
-          return;
-        }
+  return (
+    <Suspense fallback={<TldrawLoadingFallback />}>
+      <ErrorBoundary onError={() => setHasError(true)}>
+        <TldrawCanvas persistenceKey={persistenceKey} patientId={patientId} />
+      </ErrorBoundary>
+    </Suspense>
+  );
+}
 
-        const shapeIds = Array.from(selectedIds);
-        const { noteId } = event.detail || {};
-        
-        let filename = `patient-notes-${Date.now()}`;
-        if (noteId) {
-          const notes = loadNotes(patientId);
-          const note = notes.find(n => n.id === noteId);
-          if (note) {
-            filename = `${note.name}-${new Date().toISOString().split('T')[0]}`;
-          }
-        }
-        
-        await exportAs(shapeIds, 'png', filename);
-      } catch (error) {
-        console.error("Error exporting:", error);
-        alert("Erreur lors de l'exportation. Veuillez réessayer.");
-      }
-    };
+// Error Boundary simple
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; onError: () => void },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; onError: () => void }) {
+    super(props);
+    this.state = { hasError: false };
+  }
 
-    const handleSaveNote = async (event: CustomEvent) => {
-      try {
-        const { noteId } = event.detail;
-        if (!noteId) return;
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
 
-        const notes = loadNotes(patientId);
-        const note = notes.find(n => n.id === noteId);
-        if (!note) return;
+  componentDidCatch() {
+    this.props.onError();
+  }
 
-        // Sauvegarder la note avec timestamp mis à jour
-        const updatedNote = {
-          ...note,
-          updatedAt: new Date().toISOString(),
-        };
-        
-        saveNote(patientId, updatedNote);
-        alert("Note sauvegardée avec succès !");
-      } catch (error) {
-        console.error("Error saving note:", error);
-        alert("Erreur lors de la sauvegarde.");
-      }
-    };
+  render() {
+    if (this.state.hasError) {
+      return null; // L'erreur sera gérée par le parent
+    }
 
-    const handleClear = () => {
-      try {
-        editor.selectAll();
-        editor.deleteShapes(editor.getSelectedShapeIds());
-      } catch (error) {
-        console.error("Error clearing canvas:", error);
-      }
-    };
-
-    window.addEventListener('addImageToTldraw', handleAddImage as EventListener);
-    window.addEventListener('exportTldraw', handleExport as EventListener);
-    window.addEventListener('saveTldrawNote', handleSaveNote as EventListener);
-    window.addEventListener('clearTldraw', handleClear);
-
-    return () => {
-      window.removeEventListener('addImageToTldraw', handleAddImage as EventListener);
-      window.removeEventListener('exportTldraw', handleExport as EventListener);
-      window.removeEventListener('saveTldrawNote', handleSaveNote as EventListener);
-      window.removeEventListener('clearTldraw', handleClear);
-    };
-  }, [editor, exportAs, patientId]);
-
-  return null;
+    return this.props.children;
+  }
 }
 
 export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
@@ -452,13 +564,7 @@ export function PatientNotesDrawing({ patientId }: PatientNotesDrawingProps) {
       </div>
 
       <div className="relative w-full h-[600px] border border-gray-300 rounded-lg overflow-hidden">
-        <Tldraw
-          key={persistenceKey} // Force re-render quand on change de note
-          persistenceKey={persistenceKey}
-          autoFocus={false}
-        >
-          <TldrawEventHandler patientId={patientId} />
-        </Tldraw>
+        <TldrawWrapper patientId={patientId} persistenceKey={persistenceKey} />
       </div>
     </div>
   );
