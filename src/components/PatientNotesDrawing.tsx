@@ -74,7 +74,7 @@ const TldrawCanvas = lazy(() =>
           if (!editor) return;
 
           const handleAddImage = async (event: CustomEvent) => {
-            const { imagePath, dataUrl, blob } = event.detail;
+            const { imagePath, dataUrl, blob, isAnatomical = true, isClientPhoto = false } = event.detail;
             
             try {
               const assetId = AssetRecordType.createId();
@@ -109,9 +109,10 @@ const TldrawCanvas = lazy(() =>
                     w: Math.min(400, image.naturalWidth),
                     h: Math.min(400, image.naturalHeight),
                   },
-                  isLocked: true, // Auto-lock anatomical images
+                  isLocked: isAnatomical, // Lock based on image type
                   meta: {
-                    isAnatomicalImage: true,
+                    isAnatomicalImage: !isClientPhoto,
+                    isClientPhoto: isClientPhoto,
                     originalName: imagePath,
                   },
                 };
@@ -416,8 +417,10 @@ function NotesManager({ patientId, currentNoteId, onNoteChange }: {
 
 function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"patients">; currentNoteId: Id<"drawingNotes"> | null }) {
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [showPhotopicker, setShowPhotopicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const updateNote = useMutation(api.drawingNotes.update);
+  const clientPhotos = useQuery(api.photos.list, { patientId }) || [];
 
   const addImageToCanvas = async (imagePath: string) => {
     if (!imagePath) return;
@@ -430,7 +433,7 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"p
 
       // Créer un événement personnalisé pour communiquer avec le canvas
       const event = new CustomEvent('addImageToTldraw', {
-        detail: { imagePath, dataUrl, blob }
+        detail: { imagePath, dataUrl, blob, isAnatomical: true }
       });
       window.dispatchEvent(event);
       
@@ -438,6 +441,41 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"p
     } catch (error) {
       console.error("Error loading image:", error);
       alert("Erreur lors du chargement de l'image.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const addClientPhotoToCanvas = async (photo: any) => {
+    setIsLoading(true);
+    try {
+      // Use the URL provided by Convex API
+      if (!photo.url) {
+        alert("URL de la photo introuvable.");
+        return;
+      }
+      
+      // Fetch the image to convert to blob
+      const response = await fetch(photo.url);
+      const blob = await response.blob();
+      const dataUrl = (await blobToBase64(blob)) as string;
+
+      // Create custom event to communicate with canvas
+      const event = new CustomEvent('addImageToTldraw', {
+        detail: { 
+          imagePath: photo.description || `Photo ${photo.date}`, 
+          dataUrl, 
+          blob,
+          isAnatomical: true, // Lock the photo
+          isClientPhoto: true // Mark as client photo
+        }
+      });
+      window.dispatchEvent(event);
+      
+      setShowPhotopicker(false);
+    } catch (error) {
+      console.error("Error loading client photo:", error);
+      alert("Erreur lors du chargement de la photo client.");
     } finally {
       setIsLoading(false);
     }
@@ -503,6 +541,17 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"p
       </div>
 
       <div className="flex items-center gap-2 border-l pl-4">
+        <h3 className="font-semibold text-gray-800 text-sm">Photos client:</h3>
+        <button
+          onClick={() => setShowPhotopicker(true)}
+          disabled={isLoading || clientPhotos.length === 0}
+          className="px-3 py-2 bg-green-500 text-white rounded text-sm hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          📷 Choisir photo ({clientPhotos.length})
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 border-l pl-4">
         {currentNoteId && (
           <button
             onClick={saveCurrentNote}
@@ -544,6 +593,67 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"p
         </button>
       </div>
 */}
+
+      {/* Photo Picker Modal */}
+      {showPhotopicker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Choisir une photo client</h3>
+              <button
+                onClick={() => setShowPhotopicker(false)}
+                className="text-gray-500 hover:text-gray-700 text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {clientPhotos.length === 0 ? (
+              <p className="text-gray-600 text-center py-8">Aucune photo trouvée pour ce patient.</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {clientPhotos.map((photo) => {
+                  return (
+                    <div
+                      key={photo._id}
+                      className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                      onClick={() => addClientPhotoToCanvas(photo)}
+                    >
+                      <div className="aspect-square overflow-hidden">
+                        <img
+                          src={photo.url}
+                          alt={photo.description || "Photo client"}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiA5QzEwLjM0IDkgOSAxMC4zNCA5IDEyQzkgMTMuNjYgMTAuMzQgMTUgMTIgMTVDMTMuNjYgMTUgMTUgMTMuNjYgMTUgMTJDMTUgMTAuMzQgMTMuNjYgOSAxMiA5WiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K';
+                          }}
+                        />
+                      </div>
+                      <div className="p-2">
+                        <p className="text-xs text-gray-600 truncate">
+                          {photo.description || "Sans description"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(photo.date).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowPhotopicker(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
