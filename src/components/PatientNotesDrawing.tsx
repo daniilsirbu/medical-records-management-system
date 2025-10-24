@@ -99,7 +99,7 @@ const TldrawCanvas = lazy(() =>
                 editor.createAssets([asset]);
 
                 const shapeId = createShapeId();
-                editor.createShape({
+                const imageShape = {
                   id: shapeId,
                   type: "image",
                   x: 100,
@@ -109,8 +109,14 @@ const TldrawCanvas = lazy(() =>
                     w: Math.min(400, image.naturalWidth),
                     h: Math.min(400, image.naturalHeight),
                   },
-                });
+                  isLocked: true, // Auto-lock anatomical images
+                  meta: {
+                    isAnatomicalImage: true,
+                    originalName: imagePath,
+                  },
+                };
 
+                editor.createShape(imageShape);
                 editor.zoomToFit();
               };
               
@@ -177,16 +183,69 @@ const TldrawCanvas = lazy(() =>
             }
           };
 
+          const handleToggleLock = (event: CustomEvent) => {
+            try {
+              const selectedShapes = editor.getSelectedShapes();
+              if (selectedShapes.length === 0) {
+                alert("Sélectionnez d'abord les éléments à verrouiller/déverrouiller");
+                return;
+              }
+
+              selectedShapes.forEach(shape => {
+                const isCurrentlyLocked = shape.isLocked;
+                editor.updateShape({
+                  id: shape.id,
+                  type: shape.type,
+                  isLocked: !isCurrentlyLocked,
+                });
+              });
+
+              const action = selectedShapes[0].isLocked ? "déverrouillés" : "verrouillés";
+              alert(`Éléments ${action} avec succès`);
+            } catch (error) {
+              console.error("Error toggling lock:", error);
+            }
+          };
+
+          const handleLockAnatomicalImages = () => {
+            try {
+              const allShapes = editor.getCurrentPageShapes();
+              const anatomicalImages = allShapes.filter(shape => 
+                shape.type === "image" && shape.meta?.isAnatomicalImage
+              );
+
+              anatomicalImages.forEach(shape => {
+                editor.updateShape({
+                  id: shape.id,
+                  type: shape.type,
+                  isLocked: true,
+                });
+              });
+
+              if (anatomicalImages.length > 0) {
+                alert(`${anatomicalImages.length} image(s) anatomique(s) verrouillée(s)`);
+              } else {
+                alert("Aucune image anatomique trouvée");
+              }
+            } catch (error) {
+              console.error("Error locking anatomical images:", error);
+            }
+          };
+
           window.addEventListener('addImageToTldraw', handleAddImage as EventListener);
           window.addEventListener('exportTldraw', handleExport as EventListener);
           window.addEventListener('saveTldrawNote', handleSaveNote as EventListener);
           window.addEventListener('clearTldraw', handleClear);
+          window.addEventListener('toggleLockTldraw', handleToggleLock as EventListener);
+          window.addEventListener('lockAnatomicalImages', handleLockAnatomicalImages);
 
           return () => {
             window.removeEventListener('addImageToTldraw', handleAddImage as EventListener);
             window.removeEventListener('exportTldraw', handleExport as EventListener);
             window.removeEventListener('saveTldrawNote', handleSaveNote as EventListener);
             window.removeEventListener('clearTldraw', handleClear);
+            window.removeEventListener('toggleLockTldraw', handleToggleLock as EventListener);
+            window.removeEventListener('lockAnatomicalImages', handleLockAnatomicalImages);
           };
         }, [editor, exportAs, patientId]);
 
@@ -406,6 +465,16 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"p
     }
   };
 
+  const toggleLockSelected = () => {
+    const event = new CustomEvent('toggleLockTldraw');
+    window.dispatchEvent(event);
+  };
+
+  const lockAllAnatomicalImages = () => {
+    const event = new CustomEvent('lockAnatomicalImages');
+    window.dispatchEvent(event);
+  };
+
   return (
     <div className="flex items-center gap-4 flex-wrap">
       <div className="flex items-center gap-2">
@@ -457,6 +526,24 @@ function DrawingToolbarExternal({ patientId, currentNoteId }: { patientId: Id<"p
           🗑️ Effacer tout
         </button>
       </div>
+
+{/* 
+      <div className="flex items-center gap-2 border-l pl-4">
+        <button
+          onClick={toggleLockSelected}
+          className="px-3 py-2 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 whitespace-nowrap"
+        >
+          🔒 Verrouiller/Déverrouiller
+        </button>
+        
+        <button
+          onClick={lockAllAnatomicalImages}
+          className="px-3 py-2 bg-purple-500 text-white rounded text-sm hover:bg-purple-600 whitespace-nowrap"
+        >
+          🔐 Protéger images anatomiques
+        </button>
+      </div>
+*/}
     </div>
   );
 }
