@@ -100,7 +100,11 @@ export async function getSvgAsDataUrl(svg: SVGElement) {
   const imgs = Array.from(clone.querySelectorAll("image")) as SVGImageElement[];
 
   for (const img of imgs) {
-    const src = img.getAttribute("xlink:href");
+    // Check both modern 'href' and legacy 'xlink:href' attributes
+    const xlinkSrc = img.getAttribute("xlink:href");
+    const hrefSrc = img.getAttribute("href");
+    const src = hrefSrc || xlinkSrc;
+    
     if (src) {
       if (!src.startsWith("data:")) {
         const blob = await (await fetch(src)).blob();
@@ -109,7 +113,14 @@ export async function getSvgAsDataUrl(svg: SVGElement) {
           fileReader.onerror = () => reject(fileReader.error);
           fileReader.readAsDataURL(blob);
         });
-        img.setAttribute("xlink:href", base64);
+        
+        // Set both attributes for maximum compatibility
+        if (hrefSrc) {
+          img.setAttribute("href", base64);
+        }
+        if (xlinkSrc) {
+          img.setAttribute("xlink:href", base64);
+        }
       }
     }
   }

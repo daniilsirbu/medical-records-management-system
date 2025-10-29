@@ -129,15 +129,15 @@ const TldrawCanvas = lazy(() =>
 
           const handleExport = async (event: CustomEvent) => {
             try {
-              editor.selectAll();
-              const selectedIds = editor.getSelectedShapeIds();
+              // Get all shapes on the current page, including locked ones
+              const allShapes = editor.getCurrentPageShapes();
               
-              if (selectedIds.size === 0) {
+              if (allShapes.length === 0) {
                 alert("Rien à exporter. Ajoutez du contenu au canevas d'abord.");
                 return;
               }
 
-              const shapeIds = Array.from(selectedIds);
+              const shapeIds = allShapes.map(shape => shape.id);
               const { noteId } = event.detail || {};
               
               let filename = `patient-notes-${Date.now()}`;
