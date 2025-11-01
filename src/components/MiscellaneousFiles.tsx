@@ -28,29 +28,34 @@ export function MiscellaneousFiles({
   const removeFile = useMutation(api.miscFiles.remove);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    // Générer une URL de téléchargement
-    const postUrl = await generateUploadUrl();
+    // Process each selected file
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
 
-    // Télécharger le fichier
-    const result = await fetch(postUrl, {
-      method: "POST",
-      headers: { "Content-Type": file.type },
-      body: file,
-    });
-    const { storageId } = await result.json();
+      // Générer une URL de téléchargement
+      const postUrl = await generateUploadUrl();
 
-    // Créer l'entrée dans la base de données
-    await createFile({
-      patientId,
-      fileName: file.name,
-      fileType: file.type,
-      description,
-      category: category || undefined,
-      storageId,
-    });
+      // Télécharger le fichier
+      const result = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await result.json();
+
+      // Créer l'entrée dans la base de données
+      await createFile({
+        patientId,
+        fileName: file.name,
+        fileType: file.type,
+        description,
+        category: category || undefined,
+        storageId,
+      });
+    }
 
     // Réinitialiser le formulaire
     setDescription("");
@@ -121,9 +126,13 @@ export function MiscellaneousFiles({
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             onChange={handleFileSelect}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
+          <p className="text-xs text-gray-600 mt-1">
+            Vous pouvez sélectionner plusieurs fichiers à la fois. Ils auront tous la même description et catégorie.
+          </p>
         </div>
       </div>
 
